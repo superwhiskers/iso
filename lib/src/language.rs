@@ -7,11 +7,13 @@
 // file, you can obtain one at http://mozilla.org/MPL/2.0/.
 //
 
+//TODO: implement the serde feature, add more tests
+
 //! Type definitions related to thie ISO 639 language code standard
 //!
-//! Most of this module is dedicated to the [`Code`] enumeration, which enumerates over all ISO 639
-//! alpha-2 codes. However, it is also possible to derive one from its alpha-3 t and alpha-3 b
-//! codes, if wished.
+//! Most of this module is dedicated to the code enumerations, which each enumerate over their
+//! corresponding iso language code sets. Each can be converted into each other, provided that they
+//! have a corresponding language code in the other set.
 //!
 //! # Basic usage
 //!
@@ -30,28 +32,25 @@
 //! assert_eq!(english.try_into(), Ok(Iso639_2t::Eng));
 //! assert_eq!(english.try_into(), Ok(Iso639_3::Eng));
 //! ```
-//!
-//! [`Code`]: ./enum.Code.html
 
 use core::{fmt, str};
-
 use iso_macro::identifiers_from_table;
+use std::{convert::TryFrom, str::FromStr};
 
 #[cfg(feature = "std")]
 use std::error;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
-use std::str::FromStr;
 
-/// An error that may arise while working with the [`Code`] enumeration
-///
-/// [`Code`]: ./enum.Code.html
+/// A list of all possible errors encountered while working with the language code enumerations
 #[non_exhaustive]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Error {
+    /// An error returned when the provided language code is invalid
     InvalidLanguageCode(String),
+
+    /// An error returned when there is no corresponding language code in the target code set
     NoCorrespondingLanguageCode(&'static str),
 }
 
