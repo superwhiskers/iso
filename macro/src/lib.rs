@@ -347,7 +347,7 @@ pub fn identifiers_from_table(tokens: TokenStream) -> TokenStream {
                 /// Enumeration over all possible ISO
                 #[doc = #iso_code]
                 /// language codes
-                #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+                #[derive(Debug, Hash, Copy, Clone, Eq, PartialEq)]
                 pub enum #enumeration_name {
                     #(#rows),*
                 }

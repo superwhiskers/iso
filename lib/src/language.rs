@@ -45,7 +45,7 @@ use serde::{Deserialize, Serialize};
 
 /// A list of all possible errors encountered while working with the language code enumerations
 #[non_exhaustive]
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum Error {
     /// An error returned when the provided language code is invalid
     InvalidLanguageCode(String),
