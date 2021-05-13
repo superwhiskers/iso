@@ -86,7 +86,7 @@ pub trait Language {
 
 //TODO: consider making this into a derive macro when Copy and Clone can be used within a constant context
 macro language_impl($language:ident, $language_as_string:literal) {
-    impl const Language for $language {
+    impl Language for $language {
         fn name(&self) -> &'static str {
             identifiers_from_table!(match &self: $language => "name")
         }
