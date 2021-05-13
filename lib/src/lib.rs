@@ -35,11 +35,7 @@
 #![deny(clippy::option_option)]
 #![deny(clippy::mut_mut)]
 #![cfg_attr(not(feature = "std"), no_std)]
-
 #![feature(decl_macro)]
-
-//TODO: contemplate the usefulness of this
-#![feature(const_trait_impl)]
 
 pub mod country;
 pub mod language;

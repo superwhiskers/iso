@@ -164,7 +164,7 @@ fn parse_language_table_from_environment() -> Option<Vec<HashMap<LanguageTableEn
 }
 
 // note: the second parameter of each tuple is `true` if a string is being generated
-struct IdentifierGenerationInput{
+struct IdentifierGenerationInput {
     enumeration: Option<String>,
     match_against: Option<TokenStream2>,
     lhs: (LanguageTableEntryKey, bool),
@@ -301,7 +301,8 @@ pub fn identifiers_from_table(tokens: TokenStream) -> TokenStream {
                     let rhs = Ident::new(&rhs_string, Span::call_site());
 
                     // while this technically isn't safe, trying to generate a literal for a name is impossible
-                    let rhs_path = Ident::new(rhs_table.clone().try_into().unwrap(), Span::call_site());
+                    let rhs_path =
+                        Ident::new(rhs_table.clone().try_into().unwrap(), Span::call_site());
                     rows.push(quote! {
                         #lhs => Some(#rhs_path::#rhs)
                     })
@@ -324,7 +325,8 @@ pub fn identifiers_from_table(tokens: TokenStream) -> TokenStream {
                     let rhs = Ident::new(&rhs_string, Span::call_site());
 
                     // while this technically isn't safe, trying to generate a literal for a name is impossible
-                    let rhs_path = Ident::new(rhs_table.clone().try_into().unwrap(), Span::call_site());
+                    let rhs_path =
+                        Ident::new(rhs_table.clone().try_into().unwrap(), Span::call_site());
                     rows.push(quote! {
                         #lhs_path::#lhs => Some(#rhs_path::#rhs)
                     })

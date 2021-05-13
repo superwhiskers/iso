@@ -42,8 +42,8 @@ use std::error;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use std::convert::TryFrom;
+use std::str::FromStr;
 
 /// An error that may arise while working with the [`Code`] enumeration
 ///
