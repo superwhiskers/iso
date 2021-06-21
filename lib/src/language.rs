@@ -9,7 +9,7 @@
 
 //TODO: implement the serde feature, add more tests
 
-//! Type definitions related to thie ISO 639 language code standard
+//! Type definitions related to the ISO 639 language code standard
 //!
 //! Most of this module is dedicated to the code enumerations, which each enumerate over their
 //! corresponding iso language code sets. Each can be converted into each other, provided that they
