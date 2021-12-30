@@ -33,9 +33,12 @@
 //! assert_eq!(english.try_into(), Ok(Iso639_3::Eng));
 //! ```
 
-use core::{fmt, str};
+use core::{
+    convert::TryFrom,
+    fmt,
+    str::{self, FromStr},
+};
 use iso_macro::identifiers_from_table;
-use std::{convert::TryFrom, str::FromStr};
 
 #[cfg(feature = "std")]
 use std::error;
