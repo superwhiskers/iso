@@ -260,7 +260,7 @@ pub fn identifiers_from_table(tokens: TokenStream) -> TokenStream {
         }
         match (&lhs, &rhs) {
             ((lhs_table, true), None) => {
-                let lhs: Literal = Literal::string(&table_entry[lhs_table]).into();
+                let lhs: Literal = Literal::string(&table_entry[lhs_table]);
                 rows.push(quote! {
                     #lhs
                 });
@@ -268,7 +268,7 @@ pub fn identifiers_from_table(tokens: TokenStream) -> TokenStream {
             ((lhs_table, false), None) => {
                 let mut lhs_string = table_entry[lhs_table].clone();
                 ascii_capitalize(&mut lhs_string);
-                let lhs: Ident = Ident::new(&lhs_string, Span::call_site()).into();
+                let lhs: Ident = Ident::new(&lhs_string, Span::call_site());
                 rows.push(quote! {
                     #lhs
                 });
