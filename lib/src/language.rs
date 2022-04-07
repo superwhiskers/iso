@@ -7,7 +7,7 @@
 // file, you can obtain one at http://mozilla.org/MPL/2.0/.
 //
 
-//TODO: implement the serde feature, add more tests
+//TODO(superwhiskers): add more tests
 
 //! Type definitions related to the ISO 639 language code standard
 //!
@@ -23,7 +23,11 @@
 //! // the variant representing the english language
 //! let english = Iso639_1::En;
 //!
-//! println!("The name of the language represented by the ISO 639-3 code of {:?} is {}!", TryInto::<Iso639_3>::try_into(english), english.name());
+//! println!(
+//!     "The name of the language represented by the ISO 639-3 code of {} is {}!",
+//!     TryInto::<Iso639_3>::try_into(english).unwrap().code(),
+//!     english.name()
+//! );
 //!
 //! assert_eq!(english.name(), "English");
 //! assert_eq!(english.code(), "en");
@@ -38,7 +42,7 @@ use core::{
     fmt,
     str::{self, FromStr},
 };
-use iso_macro::identifiers_from_table;
+use iso_macro::language_identifiers_from_table;
 
 #[cfg(feature = "std")]
 use std::error;
@@ -86,15 +90,21 @@ pub trait Language {
     fn code(&self) -> &'static str;
 }
 
-//TODO: consider making this into a derive macro when Copy and Clone can be used within a constant context
+//TODO(superwhiskers): consider making this into a derive macro when Copy and Clone can be used within a constant context
 macro language_impl($language:ident, $language_as_string:literal) {
     impl Language for $language {
         fn name(&self) -> &'static str {
-            identifiers_from_table!(match &self: $language => "name")
+            language_identifiers_from_table!(match &self: $language => "name")
         }
 
         fn code(&self) -> &'static str {
-            identifiers_from_table!(match &self: $language => $language_as_string)
+            language_identifiers_from_table!(match &self: $language => $language_as_string)
+        }
+    }
+
+    impl fmt::Display for $language {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str(self.name())
         }
     }
 
@@ -102,7 +112,7 @@ macro language_impl($language:ident, $language_as_string:literal) {
         type Err = Error;
 
         fn from_str(s: &str) -> Result<Self, <Self as FromStr>::Err> {
-            identifiers_from_table!(match s: $language_as_string => $language).ok_or(Error::InvalidLanguageCode(s.to_string()))
+            language_identifiers_from_table!(match s: $language_as_string => $language).ok_or(Error::InvalidLanguageCode(s.to_string()))
         }
     }
 }
@@ -112,30 +122,30 @@ macro language_impl_try_from($from:ident, $to:ident) {
         type Error = Error;
 
         fn try_from(c: $from) -> Result<Self, <Self as TryFrom<$from>>::Error> {
-            identifiers_from_table!(match c: $from => $to).ok_or(Error::NoCorrespondingLanguageCode(c.code()))
+            language_identifiers_from_table!(match c: $from => $to).ok_or(Error::NoCorrespondingLanguageCode(c.code()))
         }
     }
 }
 
-identifiers_from_table!(enum Iso639_1: iso639_1);
+language_identifiers_from_table!(enum Iso639_1: iso639_1);
 language_impl!(Iso639_1, "Iso639_1");
 language_impl_try_from!(Iso639_2b, Iso639_1);
 language_impl_try_from!(Iso639_2t, Iso639_1);
 language_impl_try_from!(Iso639_3, Iso639_1);
 
-identifiers_from_table!(enum Iso639_2b: iso639_2b);
+language_identifiers_from_table!(enum Iso639_2b: iso639_2b);
 language_impl!(Iso639_2b, "Iso639_2b");
 language_impl_try_from!(Iso639_1, Iso639_2b);
 language_impl_try_from!(Iso639_2t, Iso639_2b);
 language_impl_try_from!(Iso639_3, Iso639_2b);
 
-identifiers_from_table!(enum Iso639_2t: iso639_2t);
+language_identifiers_from_table!(enum Iso639_2t: iso639_2t);
 language_impl!(Iso639_2t, "Iso639_2t");
 language_impl_try_from!(Iso639_1, Iso639_2t);
 language_impl_try_from!(Iso639_2b, Iso639_2t);
 language_impl_try_from!(Iso639_3, Iso639_2t);
 
-identifiers_from_table!(enum Iso639_3: iso639_3);
+language_identifiers_from_table!(enum Iso639_3: iso639_3);
 language_impl!(Iso639_3, "Iso639_3");
 language_impl_try_from!(Iso639_1, Iso639_3);
 language_impl_try_from!(Iso639_2b, Iso639_3);

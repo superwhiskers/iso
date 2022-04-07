@@ -39,10 +39,12 @@
 use proc_macro::{Diagnostic, Level, TokenStream};
 use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
+use serde::Deserialize;
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
     env::var,
+    fmt::Debug,
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
@@ -57,6 +59,16 @@ use syn::{
 //   - refactor the source code to not be so repetitive
 //   - give proper diagnostics and handle errors well (no `.unwrap()`)
 //   - add documentation comments
+
+/// A structure representing ISO country code entries
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct CountryEntry {
+    name: String,
+    alpha_2: String,
+    alpha_3: String,
+    country_code: String,
+}
 
 /// An enumeration over the supported ISO language code formats aas well as the name of the language
 #[derive(PartialEq, Eq, Hash, Clone)]
@@ -107,6 +119,85 @@ impl TryInto<&'static str> for LanguageTableEntryKey {
             _ => return Err("unable to find a matching string"),
         })
     }
+}
+
+#[derive(PartialEq, Eq, Hash, Clone)]
+enum CountryIdentifierKey {
+    Alpha2,
+    Alpha3,
+    Numeric,
+    Name,
+}
+
+impl CountryIdentifierKey {
+    fn as_standard_code(&self) -> Option<&'static str> {
+        Some(match &self {
+            Self::Alpha2 => "3166-1 alpha-2",
+            Self::Alpha3 => "3166-1 alpha-3",
+            Self::Numeric => "3166-1 numeric",
+            _ => return None,
+        })
+    }
+}
+
+impl TryFrom<String> for CountryIdentifierKey {
+    type Error = &'static str;
+
+    fn try_from(string: String) -> StdResult<Self, Self::Error> {
+        Ok(match string.to_lowercase().as_ref() {
+            "iso3166_1_alpha_2" => Self::Alpha2,
+            "iso3166_1_alpha_3" => Self::Alpha3,
+            "iso3166_1_numeric" => Self::Numeric,
+            "name" => Self::Name,
+            _ => return Err("unable to find a matching variant"),
+        })
+    }
+}
+
+impl TryInto<&'static str> for CountryIdentifierKey {
+    type Error = &'static str;
+
+    fn try_into(self) -> StdResult<&'static str, Self::Error> {
+        Ok(match &self {
+            Self::Alpha2 => "Iso3166_1_alpha_2",
+            Self::Alpha3 => "Iso3166_1_alpha_3",
+            _ => return Err("unable to find a matching string"),
+        })
+    }
+}
+
+fn parse_country_codes(dataset: &Path) -> Option<Vec<CountryEntry>> {
+    let country_reader = BufReader::new(match File::open(dataset) {
+        Ok(file) => file,
+        Err(e) => {
+            Diagnostic::new(
+                Level::Error,
+                format!(
+                    "Unable to load the country code dataset, {}",
+                    dataset.as_os_str().to_string_lossy()
+                ),
+            )
+            .note(format!("{}", e))
+            .emit();
+            return None;
+        }
+    });
+
+    Some(match serde_json::from_reader(country_reader) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            Diagnostic::new(
+                Level::Error,
+                format!(
+                    "Unable to parse the country code dataset, {}",
+                    dataset.as_os_str().to_string_lossy()
+                ),
+            )
+            .note(format!("{}", e))
+            .emit();
+            return None;
+        }
+    })
 }
 
 fn parse_language_table(table: &Path) -> Option<Vec<HashMap<LanguageTableEntryKey, String>>> {
@@ -163,15 +254,29 @@ fn parse_language_table_from_environment() -> Option<Vec<HashMap<LanguageTableEn
     parse_language_table(&language_table_path)
 }
 
-// note: the second parameter of each tuple is `true` if a string is being generated
-struct IdentifierGenerationInput {
-    enumeration: Option<String>,
-    match_against: Option<TokenStream2>,
-    lhs: (LanguageTableEntryKey, bool),
-    rhs: Option<(LanguageTableEntryKey, bool)>,
+fn parse_country_codes_from_environment() -> Option<Vec<CountryEntry>> {
+    let mut country_codes_path = PathBuf::from(var("CARGO_MANIFEST_DIR").unwrap());
+    country_codes_path.push("assets/country.json");
+    parse_country_codes(&country_codes_path)
 }
 
-impl Parse for IdentifierGenerationInput {
+// note: the second parameter of each tuple is `true` if a string or integer is being worked with
+struct GenerationInput<K>
+where
+    K: TryFrom<String>,
+    K::Error: Debug,
+{
+    enumeration: Option<String>,
+    match_against: Option<TokenStream2>,
+    lhs: (K, bool),
+    rhs: Option<(K, bool)>,
+}
+
+impl<K> Parse for GenerationInput<K>
+where
+    K: TryFrom<String>,
+    K::Error: Debug,
+{
     fn parse(input: ParseStream) -> Result<Self> {
         let keyword = input.lookahead1();
         let enumeration = if keyword.peek(Token![enum]) {
@@ -228,7 +333,7 @@ impl Parse for IdentifierGenerationInput {
             None
         };
 
-        Ok(IdentifierGenerationInput {
+        Ok(GenerationInput {
             enumeration,
             match_against,
             lhs,
@@ -237,21 +342,201 @@ impl Parse for IdentifierGenerationInput {
     }
 }
 
-fn ascii_capitalize(string: &mut str) {
-    if let Some(r) = string.get_mut(0..1) {
-        r.make_ascii_uppercase();
+fn ascii_formatter(string: &mut str) {
+    if let Some(start) = string.get_mut(0..1) {
+        start.make_ascii_uppercase();
+    }
+    if let Some(remainder) = string.get_mut(1..) {
+        remainder.make_ascii_lowercase();
     }
 }
 
 #[proc_macro]
-pub fn identifiers_from_table(tokens: TokenStream) -> TokenStream {
-    let table = parse_language_table_from_environment().unwrap();
-    let IdentifierGenerationInput {
+pub fn country_identifiers_from_table(tokens: TokenStream) -> TokenStream {
+    // same note about lazy table extraction
+    let country_codes = parse_country_codes_from_environment().unwrap();
+    let GenerationInput {
         enumeration,
         match_against,
         lhs,
         rhs,
-    } = parse_macro_input!(tokens as IdentifierGenerationInput);
+    } = parse_macro_input!(tokens as GenerationInput<CountryIdentifierKey>);
+
+    let mut rows: Vec<proc_macro2::TokenStream> = Vec::new();
+    for codes in country_codes {
+        match (&lhs, &rhs) {
+            ((lhs_key, true), None) => {
+                let lhs = Literal::string(match &lhs_key {
+                    CountryIdentifierKey::Alpha2 => &codes.alpha_2,
+                    CountryIdentifierKey::Alpha3 => &codes.alpha_3,
+                    CountryIdentifierKey::Numeric => {
+                        panic!("numeric identifiers cannot be used alone")
+                    }
+                    CountryIdentifierKey::Name => panic!("names cannot be used alone"),
+                });
+                rows.push(quote! {
+                    #lhs
+                });
+            }
+            ((lhs_key, false), None) => {
+                let mut lhs_string = match &lhs_key {
+                    CountryIdentifierKey::Alpha2 => codes.alpha_2,
+                    CountryIdentifierKey::Alpha3 => codes.alpha_3,
+                    CountryIdentifierKey::Numeric => {
+                        panic!("numeric identifiers cannot be used as an identifier")
+                    }
+                    CountryIdentifierKey::Name => panic!("names cannot be used as an identifier"),
+                };
+                ascii_formatter(&mut lhs_string);
+                let lhs = Ident::new(&lhs_string, Span::call_site());
+                rows.push(quote! {
+                    #lhs
+                });
+            }
+            ((lhs_key, true), Some((rhs_key, true))) => {
+                let lhs = match &lhs_key {
+                    CountryIdentifierKey::Alpha2 => Literal::string(&codes.alpha_2),
+                    CountryIdentifierKey::Alpha3 => Literal::string(&codes.alpha_3),
+                    CountryIdentifierKey::Numeric => Literal::u16_unsuffixed(codes.country_code.parse().unwrap()),
+                    CountryIdentifierKey::Name => Literal::string(&codes.name),
+                };
+                let rhs = match &rhs_key {
+                    CountryIdentifierKey::Alpha2 => Literal::string(&codes.alpha_2),
+                    CountryIdentifierKey::Alpha3 => Literal::string(&codes.alpha_3),
+                    CountryIdentifierKey::Numeric => Literal::u16_unsuffixed(codes.country_code.parse().unwrap()),
+                    CountryIdentifierKey::Name => Literal::string(&codes.name),
+                };
+                rows.push(quote! {
+                    #lhs => #rhs
+                });
+            }
+            ((lhs_key, false), Some((rhs_key, true))) => {
+                let mut lhs_string = match &lhs_key {
+                    CountryIdentifierKey::Alpha2 => codes.alpha_2.clone(),
+                    CountryIdentifierKey::Alpha3 => codes.alpha_3.clone(),
+                    CountryIdentifierKey::Numeric => {
+                        panic!("numeric identifiers cannot be used as an identifier")
+                    }
+                    CountryIdentifierKey::Name => panic!("names cannot be used as an identifier"),
+                };
+                ascii_formatter(&mut lhs_string);
+                let lhs = Ident::new(&lhs_string, Span::call_site());
+                let lhs_path = Ident::new(lhs_key.clone().try_into().unwrap(), Span::call_site());
+                let rhs = match &rhs_key {
+                    CountryIdentifierKey::Alpha2 => Literal::string(&codes.alpha_2),
+                    CountryIdentifierKey::Alpha3 => Literal::string(&codes.alpha_3),
+                    CountryIdentifierKey::Numeric => Literal::u16_unsuffixed(codes.country_code.parse().unwrap()),
+                    CountryIdentifierKey::Name => Literal::string(&codes.name),
+                };
+                rows.push(quote! {
+                    #lhs_path::#lhs => #rhs
+                });
+            }
+            ((lhs_key, true), Some((rhs_key, false))) => {
+                let lhs = match &lhs_key {
+                    CountryIdentifierKey::Alpha2 => Literal::string(&codes.alpha_2),
+                    CountryIdentifierKey::Alpha3 => Literal::string(&codes.alpha_3),
+                    CountryIdentifierKey::Numeric => Literal::u16_unsuffixed(codes.country_code.parse().unwrap()),
+                    CountryIdentifierKey::Name => Literal::string(&codes.name),
+                };
+                let mut rhs_string = match &rhs_key {
+                    CountryIdentifierKey::Alpha2 => codes.alpha_2.clone(),
+                    CountryIdentifierKey::Alpha3 => codes.alpha_3.clone(),
+                    CountryIdentifierKey::Numeric => {
+                        panic!("numeric identifiers cannot be used as an identifier")
+                    }
+                    CountryIdentifierKey::Name => panic!("names cannot be used as an identifier"),
+                };
+                ascii_formatter(&mut rhs_string);
+                let rhs = Ident::new(&rhs_string, Span::call_site());
+                let rhs_path = Ident::new(rhs_key.clone().try_into().unwrap(), Span::call_site());
+                rows.push(quote! {
+                    #lhs => Some(#rhs_path::#rhs)
+                });
+            }
+            ((lhs_key, false), Some((rhs_key, false))) => {
+                let mut lhs_string = match &lhs_key {
+                    CountryIdentifierKey::Alpha2 => codes.alpha_2.clone(),
+                    CountryIdentifierKey::Alpha3 => codes.alpha_3.clone(),
+                    CountryIdentifierKey::Numeric => {
+                        panic!("numeric identifiers cannot be used as an identifier")
+                    }
+                    CountryIdentifierKey::Name => panic!("names cannot be used as an identifier"),
+                };
+                ascii_formatter(&mut lhs_string);
+                let lhs = Ident::new(&lhs_string, Span::call_site());
+                let lhs_path = Ident::new(lhs_key.clone().try_into().unwrap(), Span::call_site());
+                let mut rhs_string = match &rhs_key {
+                    CountryIdentifierKey::Alpha2 => codes.alpha_2.clone(),
+                    CountryIdentifierKey::Alpha3 => codes.alpha_3.clone(),
+                    CountryIdentifierKey::Numeric => {
+                        panic!("numeric identifiers cannot be used as an identifier")
+                    }
+                    CountryIdentifierKey::Name => panic!("names cannot be used as an identifier"),
+                };
+                ascii_formatter(&mut rhs_string);
+                let rhs = Ident::new(&rhs_string, Span::call_site());
+                let rhs_path = Ident::new(rhs_key.clone().try_into().unwrap(), Span::call_site());
+
+                // we don't need optionals here because there's always an alpha3 and numeric code for every alpha2 and friends
+                rows.push(quote! {
+                    #lhs_path::#lhs => #rhs_path::#rhs
+                });
+            }
+        }
+    }
+
+    return TokenStream::from(if let Some(enumeration_name) = enumeration {
+        let enumeration_name = Ident::new(&enumeration_name, Span::call_site());
+        let iso_code = lhs.0.as_standard_code();
+        if let Some(iso_code) = iso_code {
+            quote! {
+                /// Enumeration over all possible ISO
+                #[doc = #iso_code]
+                /// country codes
+                #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+                #[derive(Debug, Hash, Copy, Clone, Eq, PartialEq)]
+                pub enum #enumeration_name {
+                    #(#rows),*
+                }
+            }
+        } else {
+            quote! {
+                compile_error!("the selected key to generate an enumeration from does not have a corresponding iso standard")
+            }
+        }
+    } else if let Some(match_against) = match_against {
+        if lhs.1 {
+            quote! {
+                match #match_against {
+                    #(#rows),*,
+                    _ => None,
+                }
+            }
+        } else {
+            quote! {
+                match #match_against {
+                    #(#rows),*
+                }
+            }
+        }
+    } else {
+        quote! {
+            compile_error!("not enough information was provided");
+        }
+    });
+}
+
+#[proc_macro]
+pub fn language_identifiers_from_table(tokens: TokenStream) -> TokenStream {
+    // we may be able to improve performance by doing this lazily or something
+    let table = parse_language_table_from_environment().unwrap();
+    let GenerationInput {
+        enumeration,
+        match_against,
+        lhs,
+        rhs,
+    } = parse_macro_input!(tokens as GenerationInput<LanguageTableEntryKey>);
 
     let mut rows: Vec<proc_macro2::TokenStream> = Vec::new();
     for table_entry in table {
@@ -260,14 +545,14 @@ pub fn identifiers_from_table(tokens: TokenStream) -> TokenStream {
         }
         match (&lhs, &rhs) {
             ((lhs_table, true), None) => {
-                let lhs: Literal = Literal::string(&table_entry[lhs_table]);
+                let lhs = Literal::string(&table_entry[lhs_table]);
                 rows.push(quote! {
                     #lhs
                 });
             }
             ((lhs_table, false), None) => {
                 let mut lhs_string = table_entry[lhs_table].clone();
-                ascii_capitalize(&mut lhs_string);
+                ascii_formatter(&mut lhs_string);
                 let lhs: Ident = Ident::new(&lhs_string, Span::call_site());
                 rows.push(quote! {
                     #lhs
@@ -282,7 +567,7 @@ pub fn identifiers_from_table(tokens: TokenStream) -> TokenStream {
             }
             ((lhs_table, false), Some((rhs_table, true))) => {
                 let mut lhs_string = table_entry[lhs_table].clone();
-                ascii_capitalize(&mut lhs_string);
+                ascii_formatter(&mut lhs_string);
                 let lhs = Ident::new(&lhs_string, Span::call_site());
 
                 // while this technically isn't safe, trying to generate a literal for a name is impossible
@@ -297,7 +582,7 @@ pub fn identifiers_from_table(tokens: TokenStream) -> TokenStream {
                 let lhs = Literal::string(&table_entry[lhs_table]);
                 if let Some(rhs) = table_entry.get(rhs_table) {
                     let mut rhs_string = rhs.clone();
-                    ascii_capitalize(&mut rhs_string);
+                    ascii_formatter(&mut rhs_string);
                     let rhs = Ident::new(&rhs_string, Span::call_site());
 
                     // while this technically isn't safe, trying to generate a literal for a name is impossible
@@ -314,14 +599,14 @@ pub fn identifiers_from_table(tokens: TokenStream) -> TokenStream {
             }
             ((lhs_table, false), Some((rhs_table, false))) => {
                 let mut lhs_string = table_entry[lhs_table].clone();
-                ascii_capitalize(&mut lhs_string);
+                ascii_formatter(&mut lhs_string);
                 let lhs = Ident::new(&lhs_string, Span::call_site());
 
                 // while this technically isn't safe, trying to generate a literal for a name is impossible
                 let lhs_path = Ident::new(lhs_table.clone().try_into().unwrap(), Span::call_site());
                 if let Some(rhs) = table_entry.get(rhs_table) {
                     let mut rhs_string = rhs.clone();
-                    ascii_capitalize(&mut rhs_string);
+                    ascii_formatter(&mut rhs_string);
                     let rhs = Ident::new(&rhs_string, Span::call_site());
 
                     // while this technically isn't safe, trying to generate a literal for a name is impossible
@@ -347,6 +632,7 @@ pub fn identifiers_from_table(tokens: TokenStream) -> TokenStream {
                 /// Enumeration over all possible ISO
                 #[doc = #iso_code]
                 /// language codes
+                #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
                 #[derive(Debug, Hash, Copy, Clone, Eq, PartialEq)]
                 pub enum #enumeration_name {
                     #(#rows),*
