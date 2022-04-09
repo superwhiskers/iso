@@ -353,7 +353,6 @@ fn ascii_formatter(string: &mut str) {
 
 #[proc_macro]
 pub fn country_identifiers_from_table(tokens: TokenStream) -> TokenStream {
-    // same note about lazy table extraction
     let country_codes = parse_country_codes_from_environment().unwrap();
     let GenerationInput {
         enumeration,
@@ -529,7 +528,6 @@ pub fn country_identifiers_from_table(tokens: TokenStream) -> TokenStream {
 
 #[proc_macro]
 pub fn language_identifiers_from_table(tokens: TokenStream) -> TokenStream {
-    // we may be able to improve performance by doing this lazily or something
     let table = parse_language_table_from_environment().unwrap();
     let GenerationInput {
         enumeration,

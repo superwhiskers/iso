@@ -14,9 +14,10 @@ license = "MPL-2.0"
 test = true
 
 [features]
-default = ["std"]
-std = []
-serde = ["serde/std"]
+default = ["std", "country", "language"]
+std = ["serde/std"]
+country = []
+language = []
 
 [dependencies.serde]
 default_features = false
