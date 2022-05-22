@@ -494,6 +494,7 @@ pub fn country_identifiers_from_table(tokens: TokenStream) -> TokenStream {
                 #[doc = #iso_code]
                 /// country codes
                 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+                #[cfg_attr(feature = "serde", serde(rename_all = "UPPERCASE"))]
                 #[derive(Debug, Hash, Copy, Clone, Eq, PartialEq)]
                 pub enum #enumeration_name {
                     #(#rows),*
@@ -631,6 +632,7 @@ pub fn language_identifiers_from_table(tokens: TokenStream) -> TokenStream {
                 #[doc = #iso_code]
                 /// language codes
                 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+                #[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
                 #[derive(Debug, Hash, Copy, Clone, Eq, PartialEq)]
                 pub enum #enumeration_name {
                     #(#rows),*
