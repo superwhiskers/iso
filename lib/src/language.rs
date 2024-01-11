@@ -91,38 +91,42 @@ pub trait Language {
 }
 
 //TODO(superwhiskers): consider making this into a derive macro when Copy and Clone can be used within a constant context
-macro language_impl($language:ident, $language_as_string:literal) {
-    impl Language for $language {
-        fn name(&self) -> &'static str {
-            language_identifiers_from_table!(match &self: $language => "name")
+macro_rules! language_impl {
+    ($language:ident, $language_as_string:literal) =>  {
+        impl Language for $language {
+            fn name(&self) -> &'static str {
+                language_identifiers_from_table!(match &self: $language => "name")
+            }
+
+            fn code(&self) -> &'static str {
+                language_identifiers_from_table!(match &self: $language => $language_as_string)
+            }
         }
 
-        fn code(&self) -> &'static str {
-            language_identifiers_from_table!(match &self: $language => $language_as_string)
+        impl fmt::Display for $language {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str(self.name())
+            }
         }
-    }
 
-    impl fmt::Display for $language {
-        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            formatter.write_str(self.name())
-        }
-    }
+        impl FromStr for $language {
+            type Err = Error;
 
-    impl FromStr for $language {
-        type Err = Error;
-
-        fn from_str(s: &str) -> Result<Self, <Self as FromStr>::Err> {
-            language_identifiers_from_table!(match s: $language_as_string => $language).ok_or(Error::InvalidLanguageCode(s.to_string()))
+            fn from_str(s: &str) -> Result<Self, <Self as FromStr>::Err> {
+                language_identifiers_from_table!(match s: $language_as_string => $language).ok_or(Error::InvalidLanguageCode(s.to_string()))
+            }
         }
     }
 }
 
-macro language_impl_try_from($from:ident, $to:ident) {
-    impl TryFrom<$from> for $to {
-        type Error = Error;
+macro_rules! language_impl_try_from {
+    ($from:ident, $to:ident) => {
+        impl TryFrom<$from> for $to {
+            type Error = Error;
 
-        fn try_from(c: $from) -> Result<Self, <Self as TryFrom<$from>>::Error> {
-            language_identifiers_from_table!(match c: $from => $to).ok_or(Error::NoCorrespondingLanguageCode(c.code()))
+            fn try_from(c: $from) -> Result<Self, <Self as TryFrom<$from>>::Error> {
+                language_identifiers_from_table!(match c: $from => $to).ok_or(Error::NoCorrespondingLanguageCode(c.code()))
+            }
         }
     }
 }

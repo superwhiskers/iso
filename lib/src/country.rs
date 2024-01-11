@@ -83,48 +83,52 @@ pub trait Country {
 }
 
 //TODO: consider making this into a derive macro like what is said in the language file
-macro country_impl($country:ident, $country_as_string:literal) {
-    impl Country for $country {
-        fn name(&self) -> &'static str {
-            country_identifiers_from_table!(match &self: $country => "name")
+macro_rules! country_impl {
+    ($country:ident, $country_as_string:literal) => {
+        impl Country for $country {
+            fn name(&self) -> &'static str {
+                country_identifiers_from_table!(match &self: $country => "name")
+            }
+
+            fn numeric(&self) -> u16 {
+                country_identifiers_from_table!(match &self: $country => "Iso3166_1_numeric")
+            }
+
+            fn code(&self) -> &'static str {
+                country_identifiers_from_table!(match &self: $country => $country_as_string)
+            }
         }
 
-        fn numeric(&self) -> u16 {
-            country_identifiers_from_table!(match &self: $country => "Iso3166_1_numeric")
+        impl fmt::Display for $country {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str(self.name())
+            }
         }
 
-        fn code(&self) -> &'static str {
-            country_identifiers_from_table!(match &self: $country => $country_as_string)
+        impl TryFrom<u16> for $country {
+            type Error = Error;
+
+            fn try_from(c: u16) -> Result<Self, <Self as TryFrom<u16>>::Error> {
+                country_identifiers_from_table!(match c: "Iso3166_1_numeric" => $country).ok_or(Error::InvalidCountryCode(c.to_string()))
+            }
         }
-    }
 
-    impl fmt::Display for $country {
-        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            formatter.write_str(self.name())
-        }
-    }
+        impl FromStr for $country {
+            type Err = Error;
 
-    impl TryFrom<u16> for $country {
-        type Error = Error;
-
-        fn try_from(c: u16) -> Result<Self, <Self as TryFrom<u16>>::Error> {
-            country_identifiers_from_table!(match c: "Iso3166_1_numeric" => $country).ok_or(Error::InvalidCountryCode(c.to_string()))
-        }
-    }
-
-    impl FromStr for $country {
-        type Err = Error;
-
-        fn from_str(s: &str) -> Result<Self, <Self as FromStr>::Err> {
-            country_identifiers_from_table!(match s: $country_as_string => $country).ok_or(Error::InvalidCountryCode(s.to_string()))
+            fn from_str(s: &str) -> Result<Self, <Self as FromStr>::Err> {
+                country_identifiers_from_table!(match s: $country_as_string => $country).ok_or(Error::InvalidCountryCode(s.to_string()))
+            }
         }
     }
 }
 
-macro country_impl_from($from:ident, $to:ident) {
-    impl From<$from> for $to {
-        fn from(c: $from) -> Self {
-            country_identifiers_from_table!(match c: $from => $to)
+macro_rules! country_impl_from {
+    ($from:ident, $to:ident) => {
+        impl From<$from> for $to {
+            fn from(c: $from) -> Self {
+                country_identifiers_from_table!(match c: $from => $to)
+            }
         }
     }
 }
