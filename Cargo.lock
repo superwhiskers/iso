@@ -4,7 +4,7 @@ version = 3
 
 [[package]]
 name = "iso"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "iso-macro",
  "serde",
@@ -12,7 +12,7 @@ dependencies = [
 
 [[package]]
 name = "iso-macro"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "proc-macro2",
  "quote",
